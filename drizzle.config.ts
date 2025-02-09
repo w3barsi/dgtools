@@ -1,12 +1,14 @@
-import { type Config } from "drizzle-kit";
+import { defineConfig, type Config } from "drizzle-kit";
 
 import { env } from "~/env";
 
-export default {
+export default defineConfig({
   schema: "./src/server/db/schema.ts",
-  dialect: "sqlite",
+  dialect: "turso",
+  casing: "snake_case",
   dbCredentials: {
-    url: env.DATABASE_URL,
+    url: env.TURSO_DATABASE_URL,
+    authToken: env.TURSO_AUTH_TOKEN,
   },
-  tablesFilter: ["dgtools_*"],
-} satisfies Config;
+  tablesFilter: ["nasa-system_*"],
+});
