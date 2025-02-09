@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -10,19 +10,50 @@ import {
 import { api } from "~/trpc/react";
 
 export default function Lists() {
+  const [images, setImages] = useState<
+    { src: string; contentType: string; name: string }[]
+  >([]);
   const [cards] = api.trello.getPendingCards.useSuspenseQuery();
-  const { mutate, data } = api.trello.getCardAttachments.useMutation({
-    onSuccess: (data) => {
-      console.log(data);
-    },
-  });
+  const { mutateAsync: getAttachmentsMutation, data } =
+    api.trello.getCardAttachments.useMutation({});
 
-  const getAttachments = (id: string) => {
-    mutate({ id });
+  const { mutateAsync: downloadAttachmentsMutation } =
+    api.trello.downloadCardAttachments.useMutation({
+      onSuccess: (data) => {
+        console.log(data);
+      },
+    });
+
+  const getAttachments = async (cardId: string) => {
+    const data = await getAttachmentsMutation({ id: cardId });
+    console.log(data);
+    const i = data.map((d) => ({ url: d.url, name: d.name }));
+    const results = await downloadAttachmentsMutation(i);
+    setImages(
+      results.map((result) => ({
+        src: `data:${result.contentType};base64,${result.base64Image}`,
+        contentType: result.contentType,
+        name: result.name,
+      })),
+    );
+    alert("Images are ready to download!");
+  };
+
+  const downloadAll = async () => {
+    for (const image of images) {
+      const link = document.createElement("a");
+      link.href = image.src;
+      link.download = image.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    alert("All images have been downloaded!");
   };
 
   return (
     <div className="flex flex-col">
+      <Button onClick={async () => await downloadAll()}>Download All</Button>
       <main className="grid w-full grid-cols-1 gap-2 bg-red-200 p-2 md:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           return (
@@ -38,23 +69,6 @@ export default function Lists() {
           );
         })}
       </main>
-      {data
-        ? data.map((d) => {
-            return (
-              <div key={d.url} className="grid grid-cols-2">
-                <Card>
-                  <CardContent>
-                    {d.mimeType === "image/jpeg" ? (
-                      <img alt={d.name} src={d.url} />
-                    ) : (
-                      d.url
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            );
-          })
-        : null}
     </div>
   );
 }

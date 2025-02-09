@@ -11,16 +11,59 @@ type ListType = {
 const cardSchema = z.array(z.object({ id: z.string(), name: z.string() }));
 const cardAttachmentSchema = z.array(
   z.object({
+    id: z.string(),
     url: z.string(),
     name: z.string(),
     mimeType: z.string(),
   }),
 );
 
+const downloadCardAttachmentsInput = z.array(
+  z.object({ url: z.string(), name: z.string() }),
+);
+
 export const trelloRouter = createTRPCRouter({
+  downloadCardAttachments: publicProcedure
+    .input(downloadCardAttachmentsInput)
+    .mutation(async ({ input }) => {
+      const fetchImage = async ({
+        url,
+        name,
+      }: {
+        url: string;
+        name: string;
+      }) => {
+        try {
+          const response = await fetch(url, {
+            headers: {
+              Authorization: `OAuth oauth_consumer_key="${env.TRELLO_KEY}", oauth_token="${env.TRELLO_TOKEN}"`,
+            },
+          });
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.statusText}`);
+          }
+
+          const arrayBuffer = await response.arrayBuffer();
+          const base64Image = Buffer.from(arrayBuffer).toString("base64");
+          const contentType =
+            response.headers.get("content-type") ?? "image/jpeg";
+
+          return { base64Image, contentType, name };
+        } catch (error) {
+          console.error(`Error fetching image ${url}:`, error);
+          return null;
+        }
+      };
+
+      const results = await Promise.all(input.map(fetchImage));
+      return results.filter(
+        (result): result is NonNullable<typeof result> => result !== null,
+      );
+    }),
+
   getCardAttachments: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const res = await fetch(
         `https://api.trello.com/1/cards/${input.id}/attachments?${key}`,
         {
@@ -30,7 +73,8 @@ export const trelloRouter = createTRPCRouter({
           },
         },
       );
-      return cardAttachmentSchema.parse(await res.json());
+      const atts = cardAttachmentSchema.parse(await res.json());
+      return atts;
     }),
   getPendingCards: publicProcedure.query(async () => {
     const res = await fetch(
